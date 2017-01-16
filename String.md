@@ -281,4 +281,123 @@ StringBuilder和StringBuffer的区别。
 - StringBuilder:非同步的。单线程访问效率高。
 - StringBuffer：同步的，多线程访问安全。
 
+###String内部实现
+String雷内部用一个字符数组表示字符串
+
+```java
+private final char value[];
+```
+String有两个构造方法，可以根据char数组创建String
+
+```java
+public String(char value[])
+public String(char value[], int offset, int count)
+```
+String会根据参数新创建一个数组，并拷贝内容，而不会直接用参数中的字符数组。
+
+String中大部分方法，尼日不都是操作的这个字符数组，比如
+- length()方法返回的就是这个数组的长度
+- substring()方法就是根据参数，调用构造方法String(char value[], int offset, int count)新建了一个字符串
+- indexOf查找字符或子字符串时就是在这个数组中进行查找
+
+String中还有一些方法，与char数组有关，
+返回执行索引位置的char
+```java
+public char charAt(int index)
+```
+返回字符串对应的char数组
+```java
+public char[] toCharArray()
+```
+这是一个拷贝后的数组，不是原来的数组
+将char数组中指定范围的字符拷贝入目标数组指定位置
+
+```java
+public void getChars(int srcBegin, int srcEnd, char dst[], int dstBegin)
+```
+
+
+###编码转换
+String内部是按UTF-16BE处理字符的，对于BMP字符，使用一个char，两个字节，对于增补字符，使用两个char，四个字节。
+java中使用Charset这个类表示各种编码，它有两个常用的静态方法：
+
+```java
+public static Charset defaultCharset()
+public static Charset forName(String charsetName)
+```
+第一个返回的是系统的默认编码，一般为UTF-8。
+第二个我们可以设置编码
+
+```java
+Charset charset = Charset.forName("GB18030");
+```
+String类提供了返回字符串安给定编码的字节表示：
+
+```java
+public byte[] getBytes()  
+public byte[] getBytes(String charsetName)
+public byte[] getBytes(Charset charset)
+```
+第一个没有传入编码，使用的是默认编码，第二个参数为编码名称，第三个为Charset。
+
+###不可变性
+String类是不可变的，对象一旦被创建，就没法在进行修改。String类声明了final，所以也不能被集成，内部的char数组也是final的，初始化就不能再改变了。有些方法可能看起来会修改，但是其实是创建新的Sting对象实现的，原来的String对象不会被修改。比如下面这个方法：
+
+```java
+    public String concat(String str) {
+    int otherLen = str.length();
+    if (otherLen == 0) {
+        return this;
+    }
+    int len = value.length;
+    char buf[] = Arrays.copyOf(value, len + otherLen);
+    str.getChars(buf, len);
+    return new String(buf, true);
+}
+```
+如果我们需要修改String的时候最好使用StringBuilder和StringBuffer，这样可以提高效率。
+
+###常量字符串
+Java中的字符串常量比较特殊，可以直接赋值给String变量还可以像String类型的对象一样直接调用Sting的各种方法。
+其实这些常量就是String类型的对象，在内存中，他们被放在一个共享的地方，这个地方成为`字符串常量池`，它保存所有的常量字符串，每个常量只会保存一份，被所有共享着使用，这就是我们刚开始说的不同的变量都是同一个字符串的时候内存地址是相同的原因。`当通过常量的形式使用一个字符串的时候，使用的就是常量池中的那个对应的String类型的对象.`
+但是我们使用`new`创建出来却是不一样的。具体可以看下面的代码：
+
+```java
+public String(String original) {
+    this.value = original.value;
+    this.hash = original.hash;
+}
+```
+hash是String类中的另一个实例变量，表示缓存的hashCode值。
+name1和name2指向两个不同的String对象，只是这两个对象内部的value值指向相同的char数组。其内存布局大概如下所示：
+![](https://dn-mhke0kuv.qbox.me/f036c966d022643c7b13.jpg)
+所以，`name1==name2`是不成立的，但`name1.equals(name2)`是true。
+不仅仅是比较内容是否相同，还会进行hashCode值得比较。
+
+###hashCode
+hash这个实例变量，定义如下：
+```java
+private int hash; // Default to 0
+```
+它缓存了hashCode()方法的值，也就是说，第一次调用hashCode()的时候，会把结果保存在hash这个变量中，以后再调用就直接返回保存的值。
+String类的hashCode方法：
+
+```java
+public int hashCode() {
+    int h = hash;
+    if (h == 0 && value.length > 0) {
+        char val[] = value;
+
+        for (int i = 0; i < value.length; i++) {
+            h = 31 * h + val[i];
+        }
+        hash = h;
+    }
+    return h;
+}
+```
+计算公式`s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]`
+s表示字符串，s[0]表示第一个字符，n表示字符串长度，s[0]*31^(n-1)表示31的n-1次方再乘以第一个字符的值。
+
+为什么要用这个计算方法呢？这个式子中，hash值与每个字符的值有关，每个位置乘以不同的值，hash值与每个字符的位置也有关。使用31大概是因为两个原因，一方面可以产生更分散的散列，即不同字符串hash值也一般不同，另一方面计算效率比较高，31*h与32*h-h即 (h<<5)-h等价，可以用更高效率的移位和减法操作代替乘法操作。
 
